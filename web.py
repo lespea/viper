@@ -5,21 +5,21 @@
 import os
 import re
 import sys
-import json
-import time
-import bottle
+import io
 import shutil
-import logging
 import commands
-import requests
 import argparse
 import tempfile
 import contextlib
+import time
 import tarfile
-
+import subprocess32
 from zipfile import ZipFile
 from gzip import GzipFile
 from bz2 import BZ2File
+
+import bottle
+import requests
 from bottle import route, request, response, run, get, template, static_file, redirect
 
 from viper.core.session import __sessions__
@@ -31,6 +31,7 @@ from viper.core.database import Database
 from viper.common import network
 from viper.core.ui.commands import Commands
 
+
 ##
 # User Config
 ##
@@ -38,6 +39,12 @@ from viper.core.ui.commands import Commands
 web_port = 9090
 cuckoo_api = 'http://localhost:8090'
 cuckoo_web = 'http://localhost:9191'
+
+mastif_dir = os.path.abspath(os.path.join(os.sep, 'opt', 'mastiff'))
+mastif_exe = os.path.join(mastif_dir, 'mas.py')
+mastif2html_exe = os.path.join(mastif_dir, 'mastiff2html.py')
+mastif_log_dir = os.path.join(mastif_dir, 'work')
+mastif_db_name = 'mastiff.db'
 
 ##
 # End User Config
@@ -714,6 +721,32 @@ def cuckoo_submit():
                                                                                                       str(cuckoo_id))
     else:
         return '<span class="alert alert-danger">Unable to Submit File</span>'
+
+
+# Mastiff Functions
+@route('/mastiff/scan', method="GET")
+def mastiff_scan():
+    file_path = __sessions__.current.file.path
+
+    stdOut = io.StringIO()
+    errOut = io.StringIO()
+    queueFileArgs = [mastif_exe, '-o', 'log_dir={0}'.format( mastif_log_dir ), '-o', 'db_name={0}'.format( mastif_db_name ), '--append-queue', file_path]
+    checkQueueArgs = [mastif_exe, '-o', 'log_dir={0}'.format( mastif_log_dir ), '-o', 'db_name={0}'.format( mastif_db_name ), '--list-queue']
+    genHtmlArgs = [mastif2html_exe, '-f', mastif_log_dir, '-d', mastif_db_name]
+
+    try:
+        # Run mastiff against the current file
+        subprocess32.call(queueFileArgs, stdout=stdOut, stderr=errOut)
+
+        while file_path in subprocess32.check_output(checkQueueArgs):
+            time.sleep(0.5)
+
+        subprocess32.call(genHtmlArgs)
+        return '<a href="{0}/submit/status/{1}" target="_blank"> Link To Mastiff Report</a>'.format(mastif_log_dir,
+                                                                                                  str(cuckoo_id))
+
+    except:
+        return '<p class="text-danger">Error Generating Request</p>'
 
 
 # Hex Viewer
