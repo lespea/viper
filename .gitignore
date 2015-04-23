@@ -39,3 +39,6 @@ projects/
 *.db
 
 data/yara/index.yara
+
+# Idea
+.idea
